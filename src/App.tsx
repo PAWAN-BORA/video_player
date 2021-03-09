@@ -16,6 +16,7 @@ enum Action  {
   Play = "Play",
   ChangeCurrenTime = "changeCurrentTime",
   setTotalTime = "setTotalTime",
+  SwitchScreen = "switchScreen"
 }
 
 interface State {
@@ -23,7 +24,8 @@ interface State {
   volume:number,
   isPlay:boolean,
   totalTime:string,
-  currentTime:string
+  currentTime:string,
+  isFullScreen:boolean
 }
 interface ActionType {
   type:String,
@@ -51,6 +53,9 @@ function reducer(state:State, action:ActionType):State {
     case Action.ChangeVolume: {
       return {...state, volume:action.payload.volume}
     }
+    case Action.SwitchScreen: {
+      return {...state, isFullScreen:action.payload.isFullScreen}
+    }
     default: {
       return state;
     }
@@ -66,17 +71,22 @@ function App():React.ReactElement {
     webkitRequestFullscreen(): Promise<void>;
     msRequestFullscreen(): Promise<void>;
   }>(null); 
-  const sliderCircle = useRef<HTMLDivElement>(null);
-  const isSliderActive = useRef(false);
+  // const sliderCircle = useRef<HTMLDivElement>(null);
+  // const isSliderActive = useRef(false);
   const volumePos = useRef("10");
+  const slider = useRef<HTMLDivElement>(null);
   // let totalTime = useRef('00:00');
   // let videoHeight = useRef<number>();
   // let videoWidth = useRef<number>();
 
-  const [state, dispatch]  =  useReducer(reducer, {position:0, volume:10, isPlay:false, totalTime:"00:00", currentTime:"00:00"})
+  const [state, dispatch]  =  useReducer(reducer, {position:0, volume:10, isPlay:false, totalTime:"00:00", currentTime:"00:00", isFullScreen:false})
 
 
   function setVideoWidthAndHeight(vidWidht:number, vidHeight:number) {
+    console.log(window.innerWidth);
+    // if(window.innerWidth<350) {
+    //   return;
+    // }
     let windowRatio = window.innerWidth/window.innerHeight;
     let videoRatio = vidWidht/vidHeight;
     if(windowRatio>videoRatio) {
@@ -86,14 +96,19 @@ function App():React.ReactElement {
         videoEle.current.style.height = window.innerHeight + "px";
         videoEle.current.style.width = (window.innerHeight*videoRatio) + "px";
       }
-      // console.log("sdf");
+     
     } else  {
       if(videoEle.current!=null) {
         videoEle.current.style.width = window.innerWidth + "px";
         videoEle.current.style.height = (window.innerWidth/videoRatio) + "px";
+
       }
-      console.log("234")
+      if(fullScreenEle.current!=null) {
+        fullScreenEle.current.style.top = (window.innerHeight-window.innerWidth/videoRatio)/2 + "px";
+      }
+      
     }
+    
     // let widht = window.innerWidth;
     // let height = window.innerHeight;
   }
@@ -136,6 +151,7 @@ function App():React.ReactElement {
     playOrPauseVideo("pause");
 
   }
+ 
   useEffect(()=>{
     // console.log(window.location.pathname);
     let params = window.location.pathname.split('/');
@@ -166,6 +182,7 @@ function App():React.ReactElement {
               
               setVideoWidthAndHeight(videoEle.current.videoWidth, videoEle.current.videoHeight);
               window.addEventListener('resize', resizeWindow);
+              document.addEventListener('fullscreenchange', checkFullscreen);
               videoEle.current.addEventListener('timeupdate', changeCurrentTime);
               videoEle.current.addEventListener('ended', videoEnded);
               videoEle.current.addEventListener('contextmenu', customContext);
@@ -180,6 +197,7 @@ function App():React.ReactElement {
     .catch((err)=>{
       console.log(err)
       window.removeEventListener('resize', resizeWindow);
+      document.removeEventListener('fullscreenchange', checkFullscreen);
       videoEle.current?.removeEventListener('timeupdate', changeCurrentTime);
       videoEle.current?.removeEventListener('ended', videoEnded);
       videoEle.current?.removeEventListener('contextmenu', customContext);
@@ -201,11 +219,13 @@ function App():React.ReactElement {
 
   // }
   function changePos(event:React.MouseEvent<HTMLDivElement>) {
-    console.log(event);
-    
-    let progressBar = event.target as HTMLDivElement;
-    let boundRect = progressBar.getBoundingClientRect();
-    console.log(boundRect)
+    console.log(event.target);
+    if(slider.current==null) {
+      return;
+    }
+    // let progressBar = event.target as HTMLDivElement;
+    let boundRect = slider.current.getBoundingClientRect();
+    // console.log(boundRect)
     // console.log(837492)
     if(videoEle.current!=null) {
       let clickPos = event.pageX-boundRect.x
@@ -213,9 +233,9 @@ function App():React.ReactElement {
         clickPos = 0;
       }
       let timeValue = clickPos *100/boundRect.width;
-      console.log(timeValue, clickPos)
+      // console.log(timeValue, clickPos)
       let newCurrentTime = videoEle.current.duration*timeValue/100;
-      console.log(newCurrentTime)
+      // console.log(newCurrentTime)
       videoEle.current.currentTime  = newCurrentTime;
     }
   }
@@ -240,6 +260,15 @@ function App():React.ReactElement {
       videoEle.current.volume  = newVolume;
     }
   }
+  function checkFullscreen() {
+    if (document.fullscreenElement) {
+      let newState:State  = {...state, isFullScreen:true};
+      dispatch({type:Action.SwitchScreen, payload:newState});
+    } else {
+      let newState:State  = {...state, isFullScreen:false};
+      dispatch({type:Action.SwitchScreen, payload:newState});
+    }
+  }
   function Fullscreen() {
     if(fullScreenEle.current==null) {
       return;
@@ -259,8 +288,12 @@ function App():React.ReactElement {
         else if (fullScreenEle.current.msRequestFullscreen) { /* IE/Edge */
             fullScreenEle.current.msRequestFullscreen();
         }
+        let newState:State  = {...state, isFullScreen:true};
+        dispatch({type:Action.SwitchScreen, payload:newState})
     } else {
       document.exitFullscreen();
+      let newState:State  = {...state, isFullScreen:false};
+      dispatch({type:Action.SwitchScreen, payload:newState})
     }
   }
   function playOrPauseVideo(val:string) {
@@ -298,7 +331,7 @@ function App():React.ReactElement {
       <div className="player" >
         <video ref={videoEle} className="video">Video tag is not supported in this browser</video>
         <div className="controlls">
-          <div className="slider_box" onClick={(e)=>{changePos(e)}}>
+          <div className="slider_box" ref={slider} onClick={(e)=>{changePos(e)}}>
             <div className="progress" style={{transform:scaleX}} ></div>
             {/* <div className="slider_circle" ref={sliderCircle} onMouseDown={} onMouseMove={} onMouseUp={}></div> */}
             {/* <input  type="range" min="0" max="100" value={state.position} onChange={(e)=>{checkPos(e.target.value)}} /> */}
@@ -317,7 +350,11 @@ function App():React.ReactElement {
               }
               <span><input className="vol_slider" type="range" min="0" max="10" value={state.volume} onChange={(e)=>{changeVolume(e.target.value)}}/></span>
             </div>
-            <span><FullscreenIcon onClick={Fullscreen}/></span>
+            <span>{state.isFullScreen?
+            <FullscreenExitIcon onClick={Fullscreen}/>:
+            <FullscreenIcon onClick={Fullscreen}/>
+            }
+          </span>
           </div>
         </div>
       </div>
